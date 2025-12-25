@@ -1,6 +1,9 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
+import chromadb
+from chromadb.config import Settings
+
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -44,3 +47,21 @@ Answer the user's question naturally, incorporating the context above seamlessly
 """
     return augmented_prompt
 
+
+
+def initialize_vector_db(collection_name="RAG"):
+    """
+    
+    """
+
+    db_client = chromadb.Client(Settings(
+                        anonymized_telemetry=False, # disables sending anonymous usage data to ChromaDB
+                        # persist_directory="vector_db" # optional: persist data to disk
+                        ))
+    
+    collection = db_client.create_collection(
+                                    name=collection_name,
+                                    metadata={"hnsw:space":"cosine"} # similarity search method
+                                )
+    
+    return collection
