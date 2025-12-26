@@ -250,7 +250,7 @@ print("-"*100)
 print(chunked_text[21])
 
 
-
+#---------------------------------chromaDB--------------------------------
 def initialize_vector_db(collection_name="RAG"):
     """
     
@@ -341,6 +341,9 @@ for i, chunk in enumerate(relevant_chunks):
 
 
 
+
+
+#--------------------testing streaming+ollama-----------------------------------
 # def run_ollama():
 #     # set environment variable to suppress logs and redirect output
 #     env = os.environ.copy()
