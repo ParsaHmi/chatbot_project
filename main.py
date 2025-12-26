@@ -1,5 +1,9 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
+import ollama
+import os
+import subprocess
+import threading
 
 import chromadb
 from chromadb.config import Settings
@@ -9,15 +13,26 @@ warnings.filterwarnings("ignore")
 
 # torch.backends.cudnn.enabled = False
 
+def run_ollama():
+    # set environment variable to suppress logs and redirect output
+    env = os.environ.copy()
+    env["OLLAMA_LOG_LEVEL"] = "error"
+    
+    # run with suppressed output
+    subprocess.run(
+        ["ollama", "serve"],
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL
+    )
+
+thread = threading.Thread(target=run_ollama)
+thread.start()
+
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
-# device = "cpu" # "cpu" or "cuda"
 
-torch_dtype = torch.bfloat16 if (device.startswith("cuda") and torch.cuda.is_bf16_supported()) else (
-    torch.float16 if device.startswith("cuda") else torch.float32
-)
 
-print("Device:", device)
-print("Torch DType:", torch_dtype)
+
 
 
 
@@ -49,19 +64,27 @@ Answer the user's question naturally, incorporating the context above seamlessly
 
 
 
-def initialize_vector_db(collection_name="RAG"):
-    """
-    
-    """
+if device=="cpu":
+    llm_model_name = "gemma3:270m"
+else:
+    llm_model_name = "gemma3:1b"
 
-    db_client = chromadb.Client(Settings(
-                        anonymized_telemetry=False, # disables sending anonymous usage data to ChromaDB
-                        # persist_directory="vector_db" # optional: persist data to disk
-                        ))
-    
-    collection = db_client.create_collection(
-                                    name=collection_name,
-                                    metadata={"hnsw:space":"cosine"} # similarity search method
-                                )
-    
-    return collection
+print("LLM Name:", llm_model_name)
+
+prompt = "How to train a dog?"
+
+print(f"User's Prompt:\n{prompt}")
+print("-" * 100)
+print("Bot:")
+
+response = ollama.generate(
+    model=llm_model_name,
+    prompt=prompt,
+    options={
+        "num_predict": 256,
+        "temperature": 0.7
+    }
+)
+
+# extract and print the response
+print(response["response"])
