@@ -35,14 +35,16 @@ This project demonstrates a **vector similarity search** pipeline implemented wi
 ## Requirements
 
 - Python >= 3.13
+- docker ( you can use docker-compose available on this repository)
 - Dependencies (can install via `requirements.txt`):
   ```bash
-  pip install pymilvus chromadb transformers torch tqdm fitz spacy ollama
+  pip install pymilvus chromadb transformers torch tqdm fitz spacy ollama```
 
 ## How to Run
 -first you need to use following command for docker :
   ```bash
   docker-compose up -d
+  ```
 
 
 -then you can run the app using python !
