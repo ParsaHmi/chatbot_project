@@ -288,11 +288,46 @@ else:
     collection = Collection(name=COLLECTION_NAME)
 
 
+#-----------------------HNSW indexing algorithm with Cosine metric type-----------------
 index_params = {
     "index_type": "HNSW",
     "metric_type": "COSINE",
     "params": {"M": 16, "efConstruction": 200}
 }
+
+#-----------------------HNSW indexing algorithm with Euclidean Distance metric type-----------------
+# index_params = {
+#     "index_type": "HNSW",
+#     "metric_type": "L2",
+#     "params": {"M": 16, "efConstruction": 200}
+# }
+
+#-----------------------HNSW indexing algorithm with inner product (dot product) metric type-----------------
+# index_params = {
+#     "index_type": "HNSW",
+#     "metric_type": "IP",
+#     "params": {"M": 16, "efConstruction": 200}
+# }
+
+
+#-----------------------IVF indexing algorithm-----------------
+# index_params = {
+#     "index_type": "IVF_FLAT",
+#     "metric_type": "COSINE",  
+#     "params": {"nlist": 128}  
+# }
+
+
+#-----------------------PQ indexing algorithm-----------------
+# index_params = {
+#     "index_type": "IVF_PQ",
+#     "metric_type": "COSINE",
+#     "params": {
+#         "nlist": 128, 
+#         "m": 16,       
+#         "nbits": 8    
+#     }
+# }
 
 collection.create_index(field_name="embedding", index_params=index_params)
 
