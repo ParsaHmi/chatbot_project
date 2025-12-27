@@ -39,10 +39,10 @@ This project demonstrates a **vector similarity search** pipeline implemented wi
   ```bash
   pip install pymilvus chromadb transformers torch tqdm fitz spacy ollama
 
-
 ## How to Run
-first you need to use following command for docker :
+-first you need to use following command for docker :
   ```bash
-    docker-compose up -d
+  docker-compose up -d
 
-then you can run the app using python !
+
+-then you can run the app using python !
