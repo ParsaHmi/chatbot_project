@@ -6,7 +6,8 @@ import ollama
 import os
 import subprocess
 import threading
-
+import numpy as np
+import json
 import chromadb
 from chromadb.config import Settings
 
@@ -30,7 +31,7 @@ from spacy.lang.en import English
 from typing import List, Dict, Tuple
 
 
-
+ollama = Ollama()
 
 
 
@@ -258,8 +259,6 @@ print(chunked_text[21])
 
 
 
-
-
 MILVUS_HOST = "localhost"
 MILVUS_PORT = "19530"
 COLLECTION_NAME = "test"
@@ -359,16 +358,61 @@ for i, text in enumerate(tqdm(chunked_text, desc="Storing embeddings")):
 
 
 
-users_prompt = "What is the determinant?"
-query_embedding = ollama.embeddings(model=embedding_model_name, prompt=users_prompt)["embedding"]
 
-# pad یا truncate
+# users_prompt = "What is the determinant?"
+# query_embedding = ollama.embeddings(model=embedding_model_name, prompt=users_prompt)["embedding"]
+
+# # pad یا truncate
+# if len(query_embedding) < DIM:
+#     query_embedding += [0.0] * (DIM - len(query_embedding))
+# elif len(query_embedding) > DIM:
+#     query_embedding = query_embedding[:DIM]
+
+# search_params = {"metric_type": "COSINE", "params": {"ef": 200}}
+# results = collection.search(
+#     data=[query_embedding],
+#     anns_field="embedding",
+#     param=search_params,
+#     limit=top_k,
+#     output_fields=["text"]
+# )
+
+
+
+
+# for i, item in enumerate(results[0]):
+#     similarity = 1 - item.distance
+#     print(f"Text {i+1}, Similarity Score: {round(similarity*100,3)}%")
+#     print(item.entity.get("text"))
+#     print("-"*100)
+
+
+
+# ------------------ Utility Functions ------------------
+def embed_text(text: str, model_name: str):
+    response = ollama.embeddings(model=model_name, prompt=text)
+    return response["embedding"]
+
+def cosine_similarity(vec1, vec2):
+    vec1 = np.array(vec1)
+    vec2 = np.array(vec2)
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
+# ------------------ User Query ------------------
+users_prompt = "What is the determinant?"
+top_k = 5
+DIM = 384
+
+query_embedding = embed_text(users_prompt, embedding_model_name)
+
 if len(query_embedding) < DIM:
     query_embedding += [0.0] * (DIM - len(query_embedding))
 elif len(query_embedding) > DIM:
     query_embedding = query_embedding[:DIM]
 
+# ------------------ Milvus Search ------------------
 search_params = {"metric_type": "COSINE", "params": {"ef": 200}}
+
 results = collection.search(
     data=[query_embedding],
     anns_field="embedding",
@@ -377,11 +421,68 @@ results = collection.search(
     output_fields=["text"]
 )
 
-
-
-
+relevant_chunks = []
 for i, item in enumerate(results[0]):
     similarity = 1 - item.distance
-    print(f"Text {i+1}, Similarity Score: {round(similarity*100,3)}%")
-    print(item.entity.get("text"))
+    relevant_chunks.append({
+        "text": item.entity.get("text"),
+        "embedding": item.entity.get("embedding"),
+        "similarity_score": similarity
+    })
+
+# ------------------ Display Retrieved Context ------------------
+print("\nRetrieved Context:\n")
+for i, chunk in enumerate(relevant_chunks):
+    print(f"Text {i+1}, Similarity Score: {round(chunk['similarity_score']*100,3)}%")
+    print(chunk["text"])
     print("-"*100)
+
+# ------------------ (Mock) Generated Answer ------------------
+generated_answer = """
+The determinant of a matrix is calculated by multiplying the diagonals 
+and subtracting the products of the off-diagonals for a 2x2 matrix.
+For larger matrices, methods like cofactor expansion or row reduction can be used.
+"""
+
+# ------------------ Auto-generate Questions for Evaluation ------------------
+def generate_questions_from_answer(answer_text, n_questions=3):
+    prompt = f"Generate exactly {n_questions} clear questions from the following answer. Return as a JSON list only.\n\nAnswer:\n{answer_text}"
+    response = ollama.chat(
+        model="phi3:mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    try:
+        questions = json.loads(response.text)
+        if not isinstance(questions, list):
+            raise ValueError
+        return questions
+    except:
+        return [
+            "How do you calculate the determinant of a matrix?",
+            "What is the formula for a 2x2 matrix determinant?",
+            "What methods exist to compute determinants for larger matrices?"
+        ]
+
+generated_questions = generate_questions_from_answer(generated_answer, n_questions=3)
+
+# ------------------ Evaluate Answer Relevance ------------------
+user_prompt_embedding = embed_text(users_prompt, embedding_model_name)
+similarities = {}
+
+for question in generated_questions:
+    question_embedding = embed_text(question, embedding_model_name)
+    similarity = cosine_similarity(user_prompt_embedding, question_embedding)
+    similarities[question] = similarity
+
+# ------------------ Report ------------------
+print("\nAnswer Relevance Evaluation:\n")
+print(f"User Prompt:\n{users_prompt}")
+print("-"*100)
+for q, score in similarities.items():
+    print(f"Generated Question: {q}")
+    print(f"Similarity Score: {round(score,3)}")
+    print("-"*60)
+
+answer_relevance_score = sum(similarities.values()) / len(similarities)
+print(f"\nFinal Answer Relevance Score: {round(answer_relevance_score,3)}")
+print("="*100)
