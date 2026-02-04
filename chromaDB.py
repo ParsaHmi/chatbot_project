@@ -1,4 +1,6 @@
 from transformers import AutoTokenizer, AutoModelForCausalLM
+import numpy as np
+import re
 import torch
 import ollama
 import os
@@ -172,7 +174,7 @@ pdf_path = "/home/parsa/Desktop/chatbot_project/linear-algebra_theory_intuition_
 
 # full_text = extract_text_from_pdf(pdf_path, False)
 full_text = extract_text_from_pdf(pdf_path, True)
-print(full_text[:10000])
+# print(full_text[:10000])
 
 
 
@@ -223,20 +225,10 @@ nlp = initialize_spacy_pipeline()
 doc = nlp(full_text)
 sentences = [str(sentence).strip() for sentence in doc.sents]
 
-print("Some Examples:")
-print(sentences[150])
-print(sentences[180])
-
-
 chunk_size = 12
 overlap_size = 2
 
 chunks = process_text_chunks(sentences, chunk_size, overlap_size)
-
-print("Some Examples:")
-print(chunks[20])
-print(chunks[21])
-
 
 
 chunked_text = []
@@ -244,10 +236,10 @@ for chunk in chunks:
     paragraph = " ".join(chunk).strip()
     chunked_text.append(paragraph)
 
-print("Some Examples:")
-print(chunked_text[20])
-print("-"*100)
-print(chunked_text[21])
+# print("Some Examples:")
+# print(chunked_text[20])
+# print("-"*100)
+# print(chunked_text[21])
 
 
 #---------------------------------chromaDB--------------------------------
@@ -266,6 +258,18 @@ def initialize_vector_db(collection_name="RAG"):
                                     metadata={"hnsw:space":"cosine"} # similarity search method
                                 )
     
+
+    # collection = db_client.create_collection(
+    #                                 name=collection_name,
+    #                                 metadata={"hnsw:space":"l2"} # similarity search method
+    #                             )
+
+                                
+    # collection = db_client.create_collection(
+                                #     name=collection_name,
+                                #     metadata={"hnsw:space":"ip"} # similarity search method
+                                # )
+
     return collection
 
 
@@ -298,47 +302,139 @@ for i in tqdm(range(len(chunked_text)), desc="Storing Embeddings"):
                 embeddings=response["embedding"]
                 )
     except:
-        print(f"Len: {len(text)}, Num Words: {len(text.split(' '))}, Text:\n{text}")
+        # print(f"Len: {len(text)}, Num Words: {len(text.split(' '))}, Text:\n{text}")
+        pass
     
 
 
 
 
-users_prompt = "What is the determinant?"
-# users_prompt = "What is hydraulic fracturing?"
-# users_prompt = "How stress field can affect the direction of propagation of hydraulic fractures?"
 
+
+
+
+
+def embed_text(text: str, model_name: str):
+    response = ollama.embeddings(
+        model=model_name,
+        prompt=text
+    )
+    return response["embedding"]
+
+
+def cosine_similarity(vec1, vec2):
+    vec1 = np.array(vec1)
+    vec2 = np.array(vec2)
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+
+
+def generate_questions_from_answer(answer: str, n_questions: int = 3):
+    prompt = f"""
+Generate {n_questions} clear and concise questions
+that this answer could be responding to.
+
+Return ONLY the questions, one per line.
+
+Answer:
+{answer}
+"""
+
+    response = ollama.chat(
+        model="llama3",
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    raw_output = response["message"]["content"]
+
+    questions = []
+    for line in raw_output.split("\n"):
+        line = re.sub(r"^\d+[\).\s]*", "", line).strip()
+        if line:
+            questions.append(line)
+
+    return questions[:n_questions]
+
+
+users_prompt = "how to calculate determinant?"
+# users_prompt = "What is hydraulic fracturing?"
+
+embedding_model_name = "all-minilm:22m"
 top_k = 20
-prompt_embedding = ollama.embeddings(model=embedding_model_name, prompt=users_prompt)["embedding"]
+
+prompt_embedding = embed_text(users_prompt, embedding_model_name)
 
 results = collection.query(
     query_embeddings=[prompt_embedding],
     n_results=top_k,
-    include=["documents", "embeddings", "metadatas", "distances"],
-    # where={"domain": {"$eq": domain}}
+    include=["documents", "embeddings", "distances"],
 )
 
 relevant_chunks = []
+
 if not results["documents"] or not results["documents"][0]:
-    # return relevant_chunks  # return an empty list if no results found
     print("No relevant results")
 
 top_k = min(top_k, len(results["documents"][0]))
+
 for i in range(top_k):
     relevant_chunks.append({
         "text": results["documents"][0][i],
         "embedding": results["embeddings"][0][i],
-        "similarity_score": 1 - results["distances"][0][i]  # convert distance to similarity
+        "similarity_score": 1 - results["distances"][0][i]
     })
 
 
-
+print("\nRetrieved Context :\n")
 
 for i, chunk in enumerate(relevant_chunks):
-    print(f"Text {i+1}, Similarity Score: {round(chunk['similarity_score']*100, 3)}%")
+    print(f"Chunk {i+1} | Similarity: {round(chunk['similarity_score']*100, 3)}%")
     print(chunk["text"])
-    print("-"*100)
+    print("-" * 100)
 
+
+generated_answer = """
+The determinant of a matrix can be calculated using different methods.
+For a 2x2 matrix, it is computed as ad - bc.
+For larger matrices, techniques such as cofactor expansion or row reduction
+can be used to simplify the calculation.
+"""
+
+
+generated_questions = generate_questions_from_answer(
+    generated_answer,
+    n_questions=3
+)
+
+
+print("\n Generated Questions: \n")
+for q in generated_questions:
+    print("-", q)
+
+
+user_prompt_embedding = embed_text(users_prompt, embedding_model_name)
+
+
+similarities = {}
+
+for question in generated_questions:
+    question_embedding = embed_text(question, embedding_model_name)
+    similarity = cosine_similarity(user_prompt_embedding, question_embedding)
+    similarities[question] = similarity
+
+
+print("\nAnswer Relevance Evaluation :\n")
+print(f"User Prompt:\n{users_prompt}")
+print("-" * 100)
+
+for q, score in similarities.items():
+    print(f"Generated Question: {q}")
+    print(f"Similarity Score: {round(score, 3)}")
+    print("-" * 60)
+
+answer_relevance_score = sum(similarities.values()) / len(similarities)
+
+print(f"\nFinal Answer Relevance Score: {round(answer_relevance_score, 3)}")
+print("=" * 100)
 
 
 
