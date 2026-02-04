@@ -47,4 +47,19 @@ This project demonstrates a **vector similarity search** pipeline implemented wi
   ```
 
 
--then you can run the app using python !
+---
+
+# The project now supports automatic evaluation of retrieved answers.
+
+For a given user query, the system:
+
+- Retrieves relevant document chunks from the vector database.
+- enerates a candidate answer (can be from an LLM or mock answer).
+- Automatically generates questions from the answer.
+- Computes cosine similarity between the generated questions and the original query.
+- Reports a Relevance Score (0–1), measuring how well the answer addresses the user’s query.
+
+**This evaluation helps to :**
+Compare different indexing algorithms and similarity metrics in terms of real-world usefulness.
+Ensure that the retrieval component of the system produces highly relevant results.
+The evaluation works with both ChromaDB and Milvus embeddings, using all-minilm:22m model.
